@@ -109,8 +109,6 @@ export default function Feed() {
             <h3 className="text-xl font-bold opacity-80">No active incidents found</h3>
             <p className="text-muted text-sm mt-1">Be the first to secure your neighborhood by reporting an issue.</p>
           </div>
-            <p className="text-muted">Be the first to report an issue in your area.</p>
-          </div>
         )}
       </div>
     </div>
