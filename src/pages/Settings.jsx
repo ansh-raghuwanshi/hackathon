@@ -25,16 +25,19 @@ export default function Settings() {
       const update = { name: form.name, city: finalCity };
       if (user.role === 'Citizen') update.age = Number(form.age);
       await updateDoc(doc(db, 'Users', user.uid), update);
+      // Update local state first, then navigate — avoids redirect-guard race
       setUser({ ...user, ...update });
-      setSuccess('Profile saved successfully!');
-      setTimeout(() => navigate(`/dashboard/${user.role.toLowerCase()}`), 1200);
+      navigate(`/dashboard/${user.role.toLowerCase()}`, { replace: true });
     } catch (err) {
       console.error(err);
       setError('Failed to save profile. Please try again.');
     } finally { setLoading(false); }
   };
 
-  const isComplete = user?.role === 'Citizen' ? (user?.age && user?.city) : user?.city;
+  // Derive completeness from live form values so the guard doesn't re-trigger after save
+  const isComplete = user?.role === 'Citizen'
+    ? (form.age && form.city.trim())
+    : form.city.trim();
   const initials   = user?.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?';
 
   return (
