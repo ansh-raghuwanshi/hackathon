@@ -147,7 +147,7 @@ export default function Settings() {
                   </label>
                   <input id="settings-city" type="text" className="form-input"
                     value={form.city} onChange={e => setForm({ ...form, city: e.target.value })}
-                    required placeholder="e.g. Mumbai" />
+                    required placeholder="e.g. Indore" />
                 </div>
               </div>
 
