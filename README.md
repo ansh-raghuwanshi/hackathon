@@ -39,7 +39,20 @@
 
 ## Live Demo
 
-> Deploy via `npm run build` and host the `dist/` folder on Vercel, Netlify, or Firebase Hosting.
+> hackathon-five-mu-59.vercel.app
+
+here are some credentials to login as 
+admin:
+  email:admin@gmail.com
+  password: 123456
+organisation:
+  email:anshorg@gmail.com
+  pass:123456
+ngo:
+  email:ngo@gmail.com
+  pass:123456;
+
+if you want to signup as admin,organisation or ngo then use secreatkey:982656
 
 ---
 
@@ -177,6 +190,9 @@ The app will be available at `http://localhost:5173` by default.
 
 ### Signing Up
 
+<img width="1913" height="854" alt="Screenshot 2026-04-01 120654" src="https://github.com/user-attachments/assets/df6bfb80-f5a5-4cf1-b6fa-985a49a10137" />
+
+
 1. Navigate to the app — you will land on the **Sign Up** page.
 2. Choose your **role** from the tab selector:
 
@@ -197,6 +213,9 @@ The app will be available at `http://localhost:5173` by default.
 
 ### Completing Your Profile (Required)
 
+<img width="876" height="754" alt="Screenshot 2026-04-01 121556" src="https://github.com/user-attachments/assets/442ffe6c-e992-4192-b385-ac213a64feb6" />
+
+
 > **This step is mandatory before you can use any dashboard.**
 
 After signing up, the app will redirect you to **Settings** if your profile is incomplete. Fill in:
@@ -209,6 +228,9 @@ Once saved, you will be redirected to your role-specific dashboard.
 ---
 
 ### Citizen — Reporting an Issue
+
+<img width="622" height="811" alt="image" src="https://github.com/user-attachments/assets/4749e4e5-27fa-4c4c-a1fc-96f106258d88" />
+
 
 1. Click **"Report Issue"** in the sidebar.
 2. Fill in the **Issue Title** and **Description**.
