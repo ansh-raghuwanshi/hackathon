@@ -99,14 +99,14 @@ export default function Signup() {
   };
 
   return (
-    <div className="auth-container">
+    <div className="auth-page">
       <div className="auth-card">
         <div className="auth-header">
-          <div className="logo-icon-wrapper mb-2">
-            <ShieldAlert size={36} color="white" />
+          <div className="auth-logo-ring">
+            <ShieldAlert size={28} color="white" />
           </div>
           <h2>Create Account</h2>
-          <p className="text-muted text-sm">Join the CivicSync platform to shape your city.</p>
+          <p className="text-muted text-sm">Join the SnapFix platform to shape your city.</p>
         </div>
         
         {error && <div className="auth-error">{error}</div>}
@@ -135,7 +135,7 @@ export default function Signup() {
           <form onSubmit={handleOfficialSignup} className="auth-form animate-fade-in">
             <div className="form-group mb-3">
               <label className="form-label">Full Name</label>
-              <input type="text" className="form-input" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="John Doe" />
+              <input type="text" className="form-input" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="" />
             </div>
 
             <div className="form-group mb-3">

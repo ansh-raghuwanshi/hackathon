@@ -2,299 +2,255 @@ import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { collection, query, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { User, Activity, MapPin, ShieldCheck, HeartPulse, CheckCircle, Image as ImageIcon, X } from 'lucide-react';
+import { HeartPulse, Activity, MapPin, ShieldCheck, CheckCircle, Image as ImageIcon, X } from 'lucide-react';
 import { Link, Navigate } from 'react-router-dom';
+import StatCard from '../components/ui/StatCard';
+import { SkeletonStatCard, SkeletonRow } from '../components/ui/Skeleton';
 
 export default function NGODashboard() {
   const { user } = useAuthStore();
-  const [complaints, setComplaints] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('orphan'); // orphan | active | history
-  
-  // Resolution Modal State
-  const [resolveModalOpen, setResolveModalOpen] = useState(false);
-  const [targetResolvedId, setTargetResolvedId] = useState(null);
+  const [complaints,   setComplaints]   = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [activeTab,    setActiveTab]    = useState('orphan');
+  const [resolveModal, setResolveModal] = useState(false);
+  const [targetId,     setTargetId]     = useState(null);
   const [resolveImage, setResolveImage] = useState(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isUploading,  setIsUploading]  = useState(false);
 
   useEffect(() => {
-    // Show complaints that NGOs can adopt or have adopted
     const q = query(collection(db, 'Complaints'));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setComplaints(data);
+    const unsub = onSnapshot(q, snap => {
+      setComplaints(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
-    }, (error) => {
-      console.error(error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
+    }, err => { console.error(err); setLoading(false); });
+    return () => unsub();
   }, [user]);
 
-  const handleAdopt = async (complaintId) => {
-    try {
-      await updateDoc(doc(db, 'Complaints', complaintId), {
-        status: 'Assigned',
-        updatedAt: serverTimestamp(),
-        ngoId: user.uid,
-        ngoName: user.name
-      });
-      alert("Successfully adopted complaint!");
-    } catch (e) {
-      console.error(e);
-      alert("Failed to adopt complaint");
-    }
+  if (user && !user.city) return <Navigate to="/settings" replace />;
+
+  const city = user?.city?.toUpperCase();
+  const adoptable  = complaints.filter(c => c.city?.toUpperCase() === city && c.status === 'Registered');
+  const myAdopted  = complaints.filter(c => c.city?.toUpperCase() === city && c.status === 'Assigned' && c.ngoId === user?.uid);
+  const myCompleted= complaints.filter(c => c.city?.toUpperCase() === city && c.status === 'Resolved' && c.ngoId === user?.uid);
+  const initials   = user?.name?.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase() || 'N';
+
+  const handleAdopt = async (id) => {
+    try { await updateDoc(doc(db, 'Complaints', id), { status: 'Assigned', updatedAt: serverTimestamp(), ngoId: user.uid, ngoName: user.name }); }
+    catch (e) { console.error(e); alert('Adoption failed.'); }
   };
 
-  const openResolveModal = (complaintId) => {
-    setTargetResolvedId(complaintId);
-    setResolveImage(null);
-    setResolveModalOpen(true);
-  };
+  const openResolve = (id) => { setTargetId(id); setResolveImage(null); setResolveModal(true); };
 
   const handleResolveSubmit = async (e) => {
     e.preventDefault();
-    if (!resolveImage) return alert("You must upload an evidence image to prove resolution!");
-    
+    if (!resolveImage) return alert('Please upload resolution proof.');
     setIsUploading(true);
     try {
-      const uploadData = new FormData();
-      uploadData.append('file', resolveImage);
-      uploadData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET);
-      uploadData.append('cloud_name', import.meta.env.VITE_CLOUDINARY_CLOUD_NAME);
-
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`, {
-        method: 'POST',
-        body: uploadData
-      });
+      const fd = new FormData();
+      fd.append('file', resolveImage);
+      fd.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET);
+      fd.append('cloud_name', import.meta.env.VITE_CLOUDINARY_CLOUD_NAME);
+      const res  = await fetch(`https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: fd });
       const data = await res.json();
-      
       if (data.secure_url) {
-        await updateDoc(doc(db, 'Complaints', targetResolvedId), {
-          status: 'Resolved',
-          updatedAt: serverTimestamp(),
-          resolvedImageUrl: data.secure_url
-        });
-        
-        setResolveModalOpen(false);
-        setTargetResolvedId(null);
-        setResolveImage(null);
-        alert("Case officially marked as resolved and proof securely attached!");
-      } else {
-        throw new Error("Cloudinary upload failed");
-      }
-    } catch (e) {
-      console.error(e);
-      alert("Failed to upload proof of resolution.");
-    } finally {
-      setIsUploading(false);
-    }
+        await updateDoc(doc(db, 'Complaints', targetId), { status: 'Resolved', updatedAt: serverTimestamp(), resolvedImageUrl: data.secure_url });
+        setResolveModal(false); setTargetId(null); setResolveImage(null);
+        alert('Case resolved and evidence attached!');
+      } else throw new Error('Upload failed');
+    } catch (e) { console.error(e); alert('Resolution upload failed.'); }
+    finally { setIsUploading(false); }
   };
 
-  // ONBOARDING GATE
-  if (user && !user.city) {
-    return <Navigate to="/settings" replace />;
-  }
-
-  const adoptable = complaints.filter(c => c.city?.toUpperCase() === user?.city?.toUpperCase() && c.status === 'Registered');
-  const myAdopted = complaints.filter(c => c.city?.toUpperCase() === user?.city?.toUpperCase() && c.status === 'Assigned' && c.ngoId === user?.uid);
-  const myCompleted = complaints.filter(c => c.city?.toUpperCase() === user?.city?.toUpperCase() && c.status === 'Resolved' && c.ngoId === user?.uid);
-
   return (
-    <div className="dashboard-layout animate-fade-in relative z-10">
+    <div className="dashboard-layout animate-fade-in">
       <aside className="sidebar">
-        <div className="flex flex-col gap-2 mb-6 text-center pt-4">
-          <div className="mx-auto bg-primary-light p-3 rounded-full mb-2">
-            <HeartPulse size={32} color="var(--primary)" />
+        <div style={{ textAlign: 'center', padding: '8px 0 16px' }}>
+          <div className="sidebar-avatar" style={{ background: 'linear-gradient(135deg, #34d399, #059669)' }}>{initials}</div>
+          <div style={{ fontWeight: 700, fontSize: '0.9375rem' }}>{user?.name || 'NGO Partner'}</div>
+          <div style={{ fontSize: '0.6875rem', color: 'var(--success)', marginTop: 4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Verified NGO Access
           </div>
-          <h4 className="text-lg">{user?.name || 'NGO Partner'}</h4>
-          <span className="badge mx-auto bg-primary text-white shadow-sm">Verified NGO Access</span>
         </div>
-        
-        <nav className="flex flex-col gap-3 mt-4">
-          <button 
-            className={`btn w-full justify-start ${activeTab === 'orphan' ? 'btn-primary shadow-md' : 'btn-outline border bg-background hover:bg-card hover:shadow-sm'}`}
-            onClick={() => setActiveTab('orphan')}
-          >
-            <Activity size={18} /> Orphan Center
-            {adoptable.length > 0 && <span className={`ml-auto px-2 py-0.5 text-xs rounded-full ${activeTab === 'orphan' ? 'bg-white text-primary' : 'bg-primary text-white'}`}>{adoptable.length}</span>}
-          </button>
-          
-          <button 
-            className={`btn w-full justify-start mt-2 ${activeTab === 'active' ? 'btn-primary shadow-md' : 'btn-outline border bg-background hover:bg-card hover:shadow-sm'}`}
-            onClick={() => setActiveTab('active')}
-          >
-            <ShieldCheck size={18} /> Active Missions
-            {myAdopted.length > 0 && <span className={`ml-auto px-2 py-0.5 text-xs rounded-full ${activeTab === 'active' ? 'bg-white text-primary' : 'bg-warning text-white'}`}>{myAdopted.length}</span>}
-          </button>
-          
-          <button 
-            className={`btn w-full justify-start mt-2 ${activeTab === 'history' ? 'bg-success text-white border-success shadow-md' : 'btn-outline border bg-background hover:bg-card border-success/30 text-success hover:border-success hover:shadow-sm'}`}
-            onClick={() => setActiveTab('history')}
-          >
-            <CheckCircle size={18} /> Verified Impact
-          </button>
-        </nav>
+
+        <div className="sidebar-section-title">Missions</div>
+        <button className={`nav-item ${activeTab === 'orphan' ? 'active' : ''}`} onClick={() => setActiveTab('orphan')} id="tab-orphan">
+          <Activity size={16} /> Orphan Center
+          {adoptable.length > 0 && <span className="nav-badge">{adoptable.length}</span>}
+        </button>
+        <button className={`nav-item ${activeTab === 'active' ? 'active' : ''}`} onClick={() => setActiveTab('active')} id="tab-active-missions"
+          style={{ color: myAdopted.length > 0 ? 'var(--warning)' : undefined }}>
+          <ShieldCheck size={16} /> Active Missions
+          {myAdopted.length > 0 && <span className="nav-badge" style={{ background: 'var(--warning)' }}>{myAdopted.length}</span>}
+        </button>
+        <button className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')} id="tab-impact"
+          style={{ color: 'var(--success)' }}>
+          <CheckCircle size={16} /> Verified Impact
+        </button>
       </aside>
 
       <main className="main-content">
-        <h2 className="mb-6">{user?.city ? `${user.city} City` : 'Regional'} NGO Command Sector</h2>
-        
-        <div className="grid grid-cols-3 gap-6 mb-8">
-          <div className="card text-center">
-            <h3 className="text-primary text-4xl font-bold">{adoptable.length}</h3>
-            <p className="text-muted mt-2 font-medium">Orphan Complaints</p>
-          </div>
-          <div className="card text-center border-warning/20">
-            <h3 className="text-warning text-4xl font-bold">{myAdopted.length}</h3>
-            <p className="text-muted mt-2 font-medium">Active Missions</p>
-          </div>
-          <div className="card text-center border-success/20">
-            <h3 className="text-success text-4xl font-bold">{myCompleted.length}</h3>
-            <p className="text-muted mt-2 font-medium">Historic Impact</p>
-          </div>
+        <div style={{ marginBottom: 28 }}>
+          <h2 style={{ marginBottom: 4 }}>{user?.city} City — NGO Command Sector</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9375rem' }}>Your mission board for civic impact.</p>
         </div>
 
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 32 }}>
+          {loading ? (
+            <><SkeletonStatCard /><SkeletonStatCard /><SkeletonStatCard /></>
+          ) : (
+            <>
+              <StatCard icon={Activity}    label="Orphan Complaints" value={adoptable.length}   accentColor="var(--primary)" />
+              <StatCard icon={ShieldCheck} label="Active Missions"   value={myAdopted.length}   accentColor="var(--warning)" />
+              <StatCard icon={CheckCircle} label="Historic Impact"   value={myCompleted.length} accentColor="var(--success)" />
+            </>
+          )}
+        </div>
+
+        {/* Orphan Tab */}
         {activeTab === 'orphan' && (
-          <div className="bg-card rounded-xl border p-6 shadow-md transition">
-            <h3 className="mb-6 pb-4 border-b text-primary flex items-center gap-2"><Activity /> Available for Adoption</h3>
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Activity size={16} color="var(--primary)" />
+              <h3>Available for Adoption</h3>
+            </div>
             {loading ? (
-              <p className="text-muted text-center py-4">Scanning region...</p>
+              <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[...Array(3)].map((_, i) => <SkeletonRow key={i} />)}
+              </div>
             ) : adoptable.length > 0 ? (
-              <div className="flex flex-col gap-4 max-h-[500px] overflow-y-auto pr-2">
+              <div>
                 {adoptable.map(c => (
-                  <div key={c.id} className="border p-5 rounded-xl bg-background flex flex-col gap-3 relative hover:shadow-md transition">
-                    <div className="flex justify-between items-start">
+                  <div key={c.id} style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                       <div>
-                        <h4 className="font-semibold text-text text-lg">{c.title}</h4>
-                        <p className="text-sm my-1 text-text-muted flex items-center gap-1"><MapPin size={14}/>{c.locationText}</p>
+                        <h4 style={{ marginBottom: 4 }}>{c.title}</h4>
+                        <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <MapPin size={11} /> {c.locationText}
+                        </p>
                       </div>
                       <span className="badge badge-status" data-status={c.status}>{c.status}</span>
                     </div>
-                    
-                    <div className="flex justify-between items-center border-t border-card-border pt-4 mt-2">
-                      <Link to={`/complaint/${c.id}`} className="text-primary text-sm font-medium hover:underline">View Thread Details</Link>
-                      <button onClick={() => handleAdopt(c.id)} className="btn btn-primary text-sm px-6">Adopt Case <HeartPulse size={16}/></button>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                      <Link to={`/complaint/${c.id}`} style={{ fontSize: '0.875rem', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>View details</Link>
+                      <button onClick={() => handleAdopt(c.id)} className="btn btn-primary btn-sm">
+                        <HeartPulse size={14} /> Adopt Case
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-12">
-                <ShieldCheck size={48} className="mx-auto text-success/50 mb-4" />
-                <h3 className="text-lg text-text">No cases currently need adoption.</h3>
-                <p className="text-muted mt-2">The region is stable! Check back later.</p>
+              <div style={{ padding: '64px 24px', textAlign: 'center' }}>
+                <ShieldCheck size={40} style={{ color: 'var(--success)', opacity: 0.4, margin: '0 auto 16px' }} />
+                <h3 style={{ marginBottom: 8 }}>Region is stable</h3>
+                <p style={{ color: 'var(--text-muted)' }}>No cases currently need adoption. Check back later.</p>
               </div>
             )}
           </div>
         )}
 
+        {/* Active Missions */}
         {activeTab === 'active' && (
-          <div className="bg-card rounded-xl border border-warning/30 p-6 shadow-md transition relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-warning"></div>
-            <h3 className="mb-6 pb-4 border-b text-warning flex items-center gap-2"><ShieldCheck /> Active Missions</h3>
+          <div className="card" style={{ padding: 0, overflow: 'hidden', borderColor: 'rgba(251,191,36,0.2)' }}>
+            <div style={{ background: 'var(--warning-bg)', padding: '20px 24px', borderBottom: '1px solid rgba(251,191,36,0.2)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <ShieldCheck size={16} color="var(--warning)" />
+              <h3 style={{ color: 'var(--warning)' }}>Active Missions</h3>
+            </div>
             {myAdopted.length > 0 ? (
-              <div className="flex flex-col gap-4 max-h-[500px] overflow-y-auto pr-2">
+              <div>
                 {myAdopted.map(c => (
-                  <div key={c.id} className="border border-warning/20 p-5 rounded-xl bg-orange-50/10 flex flex-col gap-3 relative hover:shadow-md transition">
-                    <div className="flex justify-between items-start">
+                  <div key={c.id} style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                       <div>
-                        <h4 className="font-semibold text-text text-lg">{c.title}</h4>
-                        <p className="text-sm my-1 text-text-muted flex items-center gap-1"><MapPin size={14}/>{c.locationText}</p>
+                        <h4 style={{ marginBottom: 4 }}>{c.title}</h4>
+                        <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <MapPin size={11} /> {c.locationText}
+                        </p>
                       </div>
-                      <span className="badge badge-status shadow-sm" data-status={c.status}>{c.status}</span>
+                      <span className="badge badge-status" data-status={c.status}>{c.status}</span>
                     </div>
-                    
-                    <div className="flex justify-between items-center border-t border-warning/20 pt-4 mt-2">
-                      <Link to={`/complaint/${c.id}`} className="text-primary text-sm font-medium hover:underline">View Thread Details</Link>
-                      <button onClick={() => openResolveModal(c.id)} className="btn bg-success text-white text-sm px-6 hover:opacity-90 shadow-sm border-none">Secure Verified Proof</button>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                      <Link to={`/complaint/${c.id}`} style={{ fontSize: '0.875rem', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>View details</Link>
+                      <button onClick={() => openResolve(c.id)} className="btn btn-success btn-sm">Submit Verified Proof</button>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-12">
-                <HeartPulse size={48} className="mx-auto text-muted/30 mb-4" />
-                <h3 className="text-lg text-text">No active missions.</h3>
-                <p className="text-muted mt-2">Head over to the Orphan Center to adopt a case.</p>
+              <div style={{ padding: '64px 24px', textAlign: 'center' }}>
+                <HeartPulse size={40} style={{ opacity: 0.3, margin: '0 auto 16px', color: 'var(--text-muted)' }} />
+                <h3 style={{ marginBottom: 8 }}>No active missions</h3>
+                <p style={{ color: 'var(--text-muted)' }}>Adopt a case from the Orphan Center to get started.</p>
               </div>
             )}
           </div>
         )}
 
+        {/* Impact History */}
         {activeTab === 'history' && (
-          <div className="bg-card rounded-xl border border-success/30 p-6 shadow-md transition relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-success"></div>
-            <h3 className="mb-6 pb-4 border-b text-success flex items-center gap-2"><CheckCircle /> Verified Impact History</h3>
+          <div className="card" style={{ padding: 0, overflow: 'hidden', borderColor: 'rgba(52,211,153,0.2)' }}>
+            <div style={{ background: 'var(--success-bg)', padding: '20px 24px', borderBottom: '1px solid rgba(52,211,153,0.2)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CheckCircle size={16} color="var(--success)" />
+              <h3 style={{ color: 'var(--success)' }}>Verified Impact History</h3>
+            </div>
             {myCompleted.length > 0 ? (
-              <div className="flex flex-col gap-4 max-h-[500px] overflow-y-auto pr-2">
+              <div>
                 {myCompleted.map(c => (
-                  <div key={c.id} className="border border-success/20 p-5 rounded-xl bg-green-50/10 flex flex-col gap-3 relative hover:shadow-md transition">
-                     <div className="flex justify-between items-start">
+                  <div key={c.id} style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                       <div>
-                        <h4 className="font-semibold text-text text-lg">{c.title}</h4>
-                        <p className="text-sm my-1 text-text-muted flex items-center gap-1"><MapPin size={14}/>{c.locationText}</p>
-                        {c.resolvedImageUrl && <p className="text-xs text-success font-bold flex items-center gap-1 mt-2">✓ Has Verified Proof</p>}
+                        <h4 style={{ marginBottom: 4 }}>{c.title}</h4>
+                        <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <MapPin size={11} /> {c.locationText}
+                        </p>
+                        {c.resolvedImageUrl && <p style={{ fontSize: '0.75rem', color: 'var(--success)', marginTop: 4, fontWeight: 600 }}>✓ Verified Proof</p>}
                       </div>
-                      <span className="badge badge-status shadow-sm" data-status={c.status}>{c.status}</span>
+                      <span className="badge badge-status" data-status={c.status}>{c.status}</span>
                     </div>
-                    
                     {c.citizenFeedback && (
-                      <div className={`mt-2 p-3 text-sm rounded-lg border ${c.isSatisfied ? 'bg-green-50/50 border-success/30' : 'bg-red-50/50 border-danger/30'}`}>
-                        <span className="font-bold block mb-1 uppercase tracking-wider text-[10px]">Citizen Feedback</span>
-                        <span className="italic">"{c.citizenFeedback}"</span>
+                      <div style={{ background: c.isSatisfied ? 'var(--success-bg)' : 'var(--danger-bg)', border: `1px solid ${c.isSatisfied ? 'rgba(52,211,153,0.15)' : 'rgba(248,113,113,0.15)'}`, borderRadius: 'var(--r-md)', padding: '8px 12px', marginBottom: 8, fontSize: '0.8125rem' }}>
+                        <span style={{ fontWeight: 700 }}>{c.isSatisfied ? '✓ Satisfied' : '✗ Unsatisfied'}</span>: "{c.citizenFeedback}"
                       </div>
                     )}
-
-                    <div className="border-t border-success/20 pt-3 mt-1">
-                      <Link to={`/complaint/${c.id}`} className="text-primary text-sm font-medium hover:underline">View Thread History</Link>
-                    </div>
+                    <Link to={`/complaint/${c.id}`} style={{ fontSize: '0.8125rem', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>View thread →</Link>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-12">
-                <CheckCircle size={48} className="mx-auto text-success/30 mb-4" />
-                <h3 className="text-lg text-text">No impact verified yet.</h3>
-                <p className="text-muted mt-2">Adopt and physically resolve a case to build your historic impact report.</p>
+              <div style={{ padding: '64px 24px', textAlign: 'center' }}>
+                <CheckCircle size={40} style={{ color: 'var(--success)', opacity: 0.3, margin: '0 auto 16px' }} />
+                <h3 style={{ marginBottom: 8 }}>No impact yet</h3>
+                <p style={{ color: 'var(--text-muted)' }}>Adopt and resolve cases to build your impact history.</p>
               </div>
             )}
           </div>
         )}
       </main>
 
-      {/* Resolution Proof Modal */}
-      {resolveModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(2, 6, 23, 0.7)', backdropFilter: 'blur(8px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setResolveModalOpen(false)}>
-          <div className="card" style={{ width: '100%', maxWidth: '450px', transform: 'scale(1)' }} onClick={e => e.stopPropagation()}>
-             <div className="flex justify-between items-center mb-4">
-               <h3 className="text-xl font-bold flex gap-2"><CheckCircle className="text-success" /> Verified Proof Upload</h3>
-               <X className="cursor-pointer text-muted hover:text-danger hover:scale-110 transition" onClick={() => setResolveModalOpen(false)} />
-             </div>
-             
-             <p className="text-sm text-text-muted mb-6">As an NGO resolving public issues, you must legally attach verified photographic evidence of your team's work to permanently close this case.</p>
-             
-             <form onSubmit={handleResolveSubmit}>
-              <div className={`form-group p-6 rounded-xl border-2 border-dashed text-center transition shadow-inset ${resolveImage ? 'bg-green-50/20 border-success' : 'bg-background border-card-border hover:border-success'}`}>
-                 <label className="form-label mb-0 cursor-pointer flex flex-col items-center w-full">
-                    {resolveImage ? <CheckCircle size={32} className="text-success mb-2" /> : <ImageIcon size={32} className="text-primary mb-2 opacity-80"/>}
-                    <span className={`text-sm ${resolveImage ? 'text-success font-bold' : 'text-text font-medium'}`}>
-                      {resolveImage ? 'Evidence Attached Successfully' : 'Tap to Upload Proof (.png, .jpg)'}
-                    </span>
-                    <input required type="file" accept="image/*" className="hidden" onChange={e => setResolveImage(e.target.files[0])} />
-                 </label>
-                 {resolveImage && <p className="text-xs text-text-muted mt-2 truncate w-full">{resolveImage.name}</p>}
-               </div>
-               
-               <button type="submit" className="btn btn-primary w-full mt-6 shadow-lg" disabled={!resolveImage || isUploading}>
-                 {isUploading ? 'Securing Audit Trail...' : 'Confirm verified Resolution'}
-               </button>
-             </form>
+      {resolveModal && (
+        <div className="modal-overlay" onClick={() => setResolveModal(false)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3 style={{ marginBottom: 4 }}>Upload Resolution Proof</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Legally attach photographic evidence of your team's work to close this case.</p>
+              </div>
+              <button className="modal-close" onClick={() => setResolveModal(false)}><X size={16} /></button>
+            </div>
+            <form onSubmit={handleResolveSubmit}>
+              <div className={`upload-zone ${resolveImage ? 'active' : ''}`} style={{ marginBottom: 20 }}>
+                <label style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                  {resolveImage ? <CheckCircle size={32} color="var(--success)" /> : <ImageIcon size={32} color="var(--primary)" style={{ opacity: 0.7 }} />}
+                  <span style={{ fontWeight: 600, color: resolveImage ? 'var(--success)' : 'var(--text-muted)' }}>
+                    {resolveImage ? resolveImage.name : 'Tap to upload proof photo'}
+                  </span>
+                  <input required type="file" accept="image/*" style={{ display: 'none' }} onChange={e => setResolveImage(e.target.files[0])} />
+                </label>
+              </div>
+              <button type="submit" className="btn btn-success w-full" disabled={!resolveImage || isUploading} style={{ padding: '0.6875rem', fontSize: '0.9375rem' }}>
+                {isUploading ? 'Securing Audit Trail…' : 'Confirm Verified Resolution'}
+              </button>
+            </form>
           </div>
         </div>
       )}

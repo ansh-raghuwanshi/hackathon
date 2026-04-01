@@ -2,112 +2,132 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuthStore } from '../store/authStore';
-import { Activity, Filter, Search } from 'lucide-react';
+import { Activity, Filter, Search, MapPin } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import ComplaintCard from '../components/ui/ComplaintCard';
+import { SkeletonRow } from '../components/ui/Skeleton';
+
+const CATEGORIES = ['All', 'Roads', 'Water', 'Electricity', 'Sanitation', 'Noise'];
 
 export default function Feed() {
-  const { user } = useAuthStore();
-  const [complaints, setComplaints] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('All');
+  const { user }  = useAuthStore();
+  const [complaints,      setComplaints]      = useState([]);
+  const [loading,         setLoading]         = useState(true);
+  const [searchTerm,      setSearchTerm]      = useState('');
+  const [categoryFilter,  setCategoryFilter]  = useState('All');
 
   useEffect(() => {
-    // Real-time listener for complaints
     const q = query(collection(db, 'Complaints'), orderBy('createdAt', 'desc'));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        // Convert firestore timestamp safely
-        createdAt: doc.data().createdAt?.toMillis() || Date.now()
-      }));
-      setComplaints(data);
+    const unsub = onSnapshot(q, snap => {
+      setComplaints(snap.docs.map(d => ({
+        id: d.id, ...d.data(),
+        createdAt: d.data().createdAt?.toMillis() || Date.now()
+      })));
       setLoading(false);
-    }, (error) => {
-      console.error("Error fetching complaints:", error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
+    }, err => { console.error(err); setLoading(false); });
+    return () => unsub();
   }, []);
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
+  if (!user)                                            return <Navigate to="/login"    replace />;
+  if (user.role === 'Citizen' && (!user.age || !user.city)) return <Navigate to="/settings" replace />;
 
-  if (user && ((user.role === 'Citizen' && !user.age) || !user.city)) {
-    return <Navigate to="/settings" replace />;
-  }
-
-  const filteredComplaints = complaints.filter(c => {
-    // GEOGRAPHIC ISOLATION (Case Insensitive Match)
+  const filtered = complaints.filter(c => {
     if (c.city?.toUpperCase() !== user.city?.toUpperCase()) return false;
-
-    const matchesSearch = c.title?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          c.locationText?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoryFilter === 'All' || c.category === categoryFilter;
-    return matchesSearch && matchesCategory;
+    const q = searchTerm.toLowerCase();
+    const matchSearch   = !q || c.title?.toLowerCase().includes(q) || c.locationText?.toLowerCase().includes(q);
+    const matchCategory = categoryFilter === 'All' || c.category === categoryFilter;
+    return matchSearch && matchCategory;
   });
 
   return (
-    <div className="container py-8 max-w-3xl mx-auto animate-fade-in relative z-10">
-      <div className="bg-card p-6 rounded-2xl border border-card-border shadow-md mb-8 flex flex-col md:flex-row justify-between md:items-center gap-4 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-full pointer-events-none"></div>
-        
-        <div className="flex flex-col">
-          <div className="flex items-center gap-2 mb-1">
-            <Activity size={24} className="text-primary" />
-            <h2 className="text-xl font-bold text-text m-0">{user?.city ? `${user.city} Civic Feed` : 'Global Outbound'}</h2>
+    <div style={{ background: 'var(--bg)', minHeight: 'calc(100vh - 64px)' }}>
+      {/* ── Sticky filter bar ── */}
+      <div style={{
+        position: 'sticky', top: 64, zIndex: 50,
+        background: 'rgba(17,24,39,0.85)',
+        backdropFilter: 'blur(20px)',
+        borderBottom: '1px solid var(--border)',
+        padding: '12px 0',
+      }}>
+        <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Activity size={18} color="var(--primary)" />
+            <span style={{ fontWeight: 700, fontSize: '1rem' }}>
+              {user?.city ? `${user.city} Civic Feed` : 'City Feed'}
+            </span>
+            {!loading && (
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', background: 'var(--surface-2)', border: '1px solid var(--border)', padding: '2px 8px', borderRadius: 'var(--r-full)', fontWeight: 600 }}>
+                {filtered.length} issues
+              </span>
+            )}
           </div>
-          <p className="text-sm text-text-muted">Live community reports & situational updates.</p>
-        </div>
-        
-        <div className="flex gap-3 w-full md:w-auto">
-          <div className="relative flex-1 md:flex-none">
-            <Search size={16} className="absolute top-1/2 -translate-y-1/2 left-3 text-text-muted/60" />
-            <input 
-              type="text" 
-              className="form-input w-full pl-9 bg-background shadow-inset border-none rounded-xl text-sm"
-              placeholder="Search hotspots..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="relative">
-            <Filter size={16} className="absolute top-1/2 -translate-y-1/2 left-3 text-primary z-10 pointer-events-none" />
-            <select 
-              className="form-select pl-9 bg-primary/10 text-primary font-bold shadow-sm border-none rounded-xl text-sm cursor-pointer hover:bg-primary/20 transition-all appearance-none pr-8"
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-            >
-              <option value="All">All Sectors</option>
-              <option value="Roads">Transport</option>
-              <option value="Water">Supply</option>
-              <option value="Electricity">Electricity</option>
-              <option value="Sanitation">Sanitation</option>
-            </select>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {/* Search */}
+            <div style={{ position: 'relative' }}>
+              <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-subtle)', pointerEvents: 'none' }} />
+              <input
+                type="text"
+                className="form-input"
+                style={{ paddingLeft: 32, paddingTop: 6, paddingBottom: 6, width: 200, fontSize: '0.875rem' }}
+                placeholder="Search issues…"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                id="feed-search"
+              />
+            </div>
+
+            {/* Category chips */}
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {CATEGORIES.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setCategoryFilter(cat)}
+                  id={`filter-${cat.toLowerCase()}`}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: 'var(--r-full)',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    border: `1px solid ${categoryFilter === cat ? 'var(--primary)' : 'var(--border)'}`,
+                    cursor: 'pointer',
+                    background: categoryFilter === cat ? 'var(--primary-light)' : 'var(--surface-2)',
+                    color: categoryFilter === cat ? 'var(--primary)' : 'var(--text-muted)',
+                    transition: 'all 150ms',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="feed-list flex flex-col gap-2">
+      {/* ── Feed list ── */}
+      <div className="container" style={{ paddingTop: 32, paddingBottom: 64, maxWidth: 720 }}>
         {loading ? (
-          <div className="text-center py-20">
-            <div className="spinner mb-4 inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-muted">Loading active city complaints...</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {[...Array(4)].map((_, i) => <SkeletonRow key={i} />)}
           </div>
-        ) : filteredComplaints.length > 0 ? (
-          filteredComplaints.map(complaint => (
-            <ComplaintCard key={complaint.id} complaint={complaint} />
-          ))
+        ) : filtered.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {filtered.map((c, i) => (
+              <ComplaintCard key={c.id} complaint={c} animationDelay={i * 40} />
+            ))}
+          </div>
         ) : (
-          <div className="card text-center py-20 bg-background/50 border border-dashed shadow-none">
-            <Activity size={48} className="mx-auto mb-4 opacity-20 text-primary" />
-            <h3 className="text-xl font-bold opacity-80">No active incidents found</h3>
-            <p className="text-muted text-sm mt-1">Be the first to secure your neighborhood by reporting an issue.</p>
+          <div style={{
+            textAlign: 'center', paddingTop: 64, paddingBottom: 64,
+            background: 'var(--surface)', border: '1px dashed var(--border)',
+            borderRadius: 'var(--r-xl)',
+          }}>
+            <MapPin size={40} style={{ color: 'var(--primary)', opacity: 0.4, margin: '0 auto 16px' }} />
+            <h3 style={{ marginBottom: 8 }}>No incidents found</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9375rem' }}>
+              {searchTerm ? 'Try a different search term.' : 'Be the first to report an issue in your city.'}
+            </p>
           </div>
         )}
       </div>
