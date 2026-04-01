@@ -20,7 +20,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuthStore();
   
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/signup" replace />;
   if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/" replace />;
   
   return children;
@@ -31,7 +31,7 @@ const RootRedirect = () => {
   const { user, loading } = useAuthStore();
   
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/signup" replace />;
   
   return <Navigate to={`/dashboard/${user.role.toLowerCase()}`} replace />;
 };
