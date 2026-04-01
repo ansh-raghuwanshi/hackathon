@@ -49,8 +49,8 @@ export default function Signup() {
         orgCategory: role === 'Organisation' ? formData.orgCategory : null
       });
 
-      // Navigate to dashboard
-      navigate(`/dashboard/${role.toLowerCase()}`);
+      // Perform a hard refresh to bypass post-auth chunk initialization bugs
+      window.location.href = `/dashboard/${role.toLowerCase()}`;
     } catch (err) {
       console.error(err);
       setError(err.message || "Failed to complete signup.");
@@ -89,7 +89,8 @@ export default function Signup() {
         avatar: result.user.photoURL
       });
       
-      navigate('/dashboard/citizen');
+      // Perform a hard refresh to bypass post-auth chunk initialization bugs
+      window.location.href = '/dashboard/citizen';
     } catch (err) {
       console.error(err);
       setError(err.message || "Google Sign-in failed.");

@@ -16,7 +16,8 @@ export default function Login() {
     e.preventDefault(); setError(''); setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      navigate('/');
+      // Perform a hard refresh to bypass post-auth chunk initialization bugs
+      window.location.href = '/';
     } catch { setError('Invalid email or password. Please try again.'); setLoading(false); }
   };
 
@@ -24,7 +25,8 @@ export default function Login() {
     setError(''); setLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
-      navigate('/');
+      // Perform a hard refresh to bypass post-auth chunk initialization bugs
+      window.location.href = '/';
     } catch { setError('Google sign-in failed. Ensure the provider is enabled in Firebase.'); setLoading(false); }
   };
 
