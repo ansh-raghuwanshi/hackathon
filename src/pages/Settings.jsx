@@ -27,7 +27,7 @@ export default function Settings() {
       await updateDoc(doc(db, 'Users', user.uid), update);
       // Update local state first, then navigate — avoids redirect-guard race
       setUser({ ...user, ...update });
-      navigate(`/dashboard/${user.role.toLowerCase()}`, { replace: true });
+      window.location.href = `/dashboard/${user.role.toLowerCase()}`;
     } catch (err) {
       console.error(err);
       setError('Failed to save profile. Please try again.');
