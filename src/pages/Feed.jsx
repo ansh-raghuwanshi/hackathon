@@ -28,8 +28,13 @@ export default function Feed() {
     return () => unsub();
   }, []);
 
-  if (!user)                                            return <Navigate to="/login"    replace />;
-  if (user.role === 'Citizen' && (!user.age || !user.city)) return <Navigate to="/settings" replace />;
+  useEffect(() => {
+    if (!user) { window.location.href = '/login'; }
+    else if (user.role === 'Citizen' && (!user.age || !user.city)) { window.location.href = '/settings'; }
+  }, [user]);
+
+  if (!user) return null;
+  if (user.role === 'Citizen' && (!user.age || !user.city)) return null;
 
   const filtered = complaints.filter(c => {
     if (c.city?.toUpperCase() !== user.city?.toUpperCase()) return false;

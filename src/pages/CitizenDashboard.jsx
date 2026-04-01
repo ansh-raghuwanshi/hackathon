@@ -57,7 +57,13 @@ export default function CitizenDashboard() {
     return () => stopCamera();
   }, []);
 
-  if (user && (!user.age || !user.city)) return <Navigate to="/settings" replace />;
+  useEffect(() => {
+    if (user && (!user.age || !user.city)) {
+      window.location.href = '/settings';
+    }
+  }, [user]);
+
+  if (user && (!user.age || !user.city)) return null;
 
   const handleDetectLocation = () => {
     setLocating(true);

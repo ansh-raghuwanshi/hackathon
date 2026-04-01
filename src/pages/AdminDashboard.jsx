@@ -22,7 +22,11 @@ export default function AdminDashboard() {
     return () => unsub();
   }, [user]);
 
-  if (user && !user.city) return <Navigate to="/settings" replace />;
+  useEffect(() => {
+    if (user && !user.city) window.location.href = '/settings';
+  }, [user]);
+
+  if (user && !user.city) return null;
 
   const cityComplaints = complaints.filter(c => c.city?.toUpperCase() === user?.city?.toUpperCase());
   const total      = cityComplaints.length;

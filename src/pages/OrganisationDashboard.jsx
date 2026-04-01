@@ -26,7 +26,11 @@ export default function OrganisationDashboard() {
     return () => unsub();
   }, [user]);
 
-  if (user && !user.city) return <Navigate to="/settings" replace />;
+  useEffect(() => {
+    if (user && !user.city) window.location.href = '/settings';
+  }, [user]);
+
+  if (user && !user.city) return null;
 
   const city = user?.city?.toUpperCase();
   const actionable = complaints.filter(c =>

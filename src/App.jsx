@@ -19,9 +19,15 @@ const Settings = lazy(() => import('./pages/Settings'));
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuthStore();
   
+  useEffect(() => {
+    if (!loading) {
+      if (!user) window.location.href = '/signup';
+      else if (allowedRoles && !allowedRoles.includes(user.role)) window.location.href = '/';
+    }
+  }, [user, loading, allowedRoles]);
+
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  if (!user) return <Navigate to="/signup" replace />;
-  if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/" replace />;
+  if (!user || (allowedRoles && !allowedRoles.includes(user.role))) return null;
   
   return children;
 };
@@ -30,10 +36,15 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 const RootRedirect = () => {
   const { user, loading } = useAuthStore();
   
+  useEffect(() => {
+    if (!loading) {
+      if (!user) window.location.href = '/signup';
+      else window.location.href = `/dashboard/${user.role.toLowerCase()}`;
+    }
+  }, [user, loading]);
+
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  if (!user) return <Navigate to="/signup" replace />;
-  
-  return <Navigate to={`/dashboard/${user.role.toLowerCase()}`} replace />;
+  return null;
 };
 
 // Simple loading fallback for lazy chunks
